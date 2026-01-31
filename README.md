@@ -12,7 +12,8 @@ go get github.com/jonwraymond/toolcompose
 
 | Package | Description | Documentation |
 |---------|-------------|---------------|
-| TBD | TBD | [docs](./docs/) |
+| `set` | Toolset composition, filtering, and exposure | [docs](./docs/) |
+| `skill` | Declarative skill planning and execution | [docs](./docs/) |
 
 ## License
 
