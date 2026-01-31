@@ -1,0 +1,554 @@
+package set
+
+import (
+	"errors"
+	"testing"
+
+	adapt "github.com/jonwraymond/toolfoundation/adapter"
+)
+
+// mockAdapter implements adapt.Adapter for testing
+type mockAdapter struct {
+	name              string
+	supportedFeatures map[adapt.SchemaFeature]bool
+	fromCanonicalErr  error
+}
+
+func (m *mockAdapter) Name() string {
+	return m.name
+}
+
+func (m *mockAdapter) ToCanonical(raw any) (*adapt.CanonicalTool, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (m *mockAdapter) FromCanonical(tool *adapt.CanonicalTool) (any, error) {
+	if m.fromCanonicalErr != nil {
+		return nil, m.fromCanonicalErr
+	}
+	// Return a simple map representation
+	return map[string]any{
+		"name":        tool.Name,
+		"namespace":   tool.Namespace,
+		"description": tool.Description,
+	}, nil
+}
+
+func (m *mockAdapter) SupportsFeature(f adapt.SchemaFeature) bool {
+	if m.supportedFeatures == nil {
+		return true // default: supports all
+	}
+	return m.supportedFeatures[f]
+}
+
+// selectiveErrorAdapter allows custom FromCanonical behavior for testing
+type selectiveErrorAdapter struct {
+	name          string
+	fromCanonical func(*adapt.CanonicalTool) (any, error)
+}
+
+func (s *selectiveErrorAdapter) Name() string {
+	return s.name
+}
+
+func (s *selectiveErrorAdapter) ToCanonical(raw any) (*adapt.CanonicalTool, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (s *selectiveErrorAdapter) FromCanonical(tool *adapt.CanonicalTool) (any, error) {
+	return s.fromCanonical(tool)
+}
+
+func (s *selectiveErrorAdapter) SupportsFeature(f adapt.SchemaFeature) bool {
+	return true
+}
+
+func TestExposure_Export(t *testing.T) {
+	t.Run("export returns slice of protocol tools", func(t *testing.T) {
+		ts := New("test")
+		ts.Add(makeTool("ns", "a", nil))
+		ts.Add(makeTool("ns", "b", nil))
+
+		adapter := &mockAdapter{name: "mock"}
+		exp := NewExposure(ts, adapter)
+
+		result, err := exp.Export()
+		if err != nil {
+			t.Fatalf("Export() error = %v", err)
+		}
+		if len(result) != 2 {
+			t.Errorf("len(Export()) = %d, want 2", len(result))
+		}
+	})
+
+	t.Run("each tool converted via adapt.FromCanonical", func(t *testing.T) {
+		ts := New("test")
+		ts.Add(&adapt.CanonicalTool{
+			Name:        "foo",
+			Namespace:   "ns",
+			Description: "test tool",
+			InputSchema: &adapt.JSONSchema{Type: "object"},
+		})
+
+		adapter := &mockAdapter{name: "mock"}
+		exp := NewExposure(ts, adapter)
+
+		result, err := exp.Export()
+		if err != nil {
+			t.Fatalf("Export() error = %v", err)
+		}
+
+		// Check the converted result has expected fields
+		converted := result[0].(map[string]any)
+		if converted["name"] != "foo" {
+			t.Errorf("converted name = %v, want 'foo'", converted["name"])
+		}
+	})
+
+	t.Run("order matches Tools order", func(t *testing.T) {
+		ts := New("test")
+		ts.Add(makeTool("", "zebra", nil))
+		ts.Add(makeTool("", "apple", nil))
+
+		adapter := &mockAdapter{name: "mock"}
+		exp := NewExposure(ts, adapter)
+
+		result, _ := exp.Export()
+
+		// Tools() returns sorted by ID, so apple comes first
+		first := result[0].(map[string]any)
+		second := result[1].(map[string]any)
+		if first["name"] != "apple" || second["name"] != "zebra" {
+			t.Errorf("Export order doesn't match Tools order: got %v, %v", first["name"], second["name"])
+		}
+	})
+}
+
+func TestExposure_ExportWithWarnings(t *testing.T) {
+	t.Run("surfaces conversion errors", func(t *testing.T) {
+		ts := New("test")
+		ts.Add(makeTool("ns", "a", nil))
+		ts.Add(makeTool("ns", "b", nil))
+
+		adapter := &mockAdapter{
+			name:             "mock",
+			fromCanonicalErr: errors.New("conversion failed"),
+		}
+		exp := NewExposure(ts, adapter)
+
+		result, _, errs := exp.ExportWithWarnings()
+
+		// All tools should fail to convert
+		if len(result) != 0 {
+			t.Errorf("len(result) = %d, want 0 (all conversions failed)", len(result))
+		}
+
+		// Should have 2 errors (one per tool)
+		if len(errs) != 2 {
+			t.Errorf("len(errs) = %d, want 2", len(errs))
+		}
+	})
+
+	t.Run("returns partial results with errors", func(t *testing.T) {
+		ts := New("test")
+		ts.Add(makeTool("ns", "a", nil))
+		ts.Add(makeTool("ns", "b", nil))
+
+		// Adapter that fails only for specific tools
+		callCount := 0
+		adapter := &selectiveErrorAdapter{
+			name: "mock",
+			fromCanonical: func(tool *adapt.CanonicalTool) (any, error) {
+				callCount++
+				if tool.Name == "a" {
+					return nil, errors.New("failed for a")
+				}
+				return map[string]any{"name": tool.Name}, nil
+			},
+		}
+		exp := NewExposure(ts, adapter)
+
+		result, _, errs := exp.ExportWithWarnings()
+
+		// Should have 1 successful conversion
+		if len(result) != 1 {
+			t.Errorf("len(result) = %d, want 1", len(result))
+		}
+
+		// Should have 1 error
+		if len(errs) != 1 {
+			t.Errorf("len(errs) = %d, want 1", len(errs))
+		}
+	})
+
+	t.Run("returns warnings for unsupported features", func(t *testing.T) {
+		ts := New("test")
+		ts.Add(&adapt.CanonicalTool{
+			Name:      "tool-with-pattern",
+			Namespace: "ns",
+			InputSchema: &adapt.JSONSchema{
+				Type:    "object",
+				Pattern: "^[a-z]+$", // uses pattern feature
+			},
+		})
+
+		adapter := &mockAdapter{
+			name: "mock",
+			supportedFeatures: map[adapt.SchemaFeature]bool{
+				adapt.FeaturePattern: false, // doesn't support pattern
+			},
+		}
+		exp := NewExposure(ts, adapter)
+
+		_, warnings, _ := exp.ExportWithWarnings()
+		if len(warnings) == 0 {
+			t.Error("Expected warning for unsupported pattern feature")
+		}
+
+		found := false
+		for _, w := range warnings {
+			if w.Feature == adapt.FeaturePattern {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Error("Warning should include pattern feature")
+		}
+	})
+
+	t.Run("warnings include feature name and adapter names", func(t *testing.T) {
+		ts := New("test")
+		ts.Add(&adapt.CanonicalTool{
+			Name:         "tool",
+			Namespace:    "ns",
+			SourceFormat: "mcp",
+			InputSchema: &adapt.JSONSchema{
+				Type:   "object",
+				Format: "email",
+			},
+		})
+
+		adapter := &mockAdapter{
+			name: "openai",
+			supportedFeatures: map[adapt.SchemaFeature]bool{
+				adapt.FeatureFormat: false,
+			},
+		}
+		exp := NewExposure(ts, adapter)
+
+		_, warnings, _ := exp.ExportWithWarnings()
+		if len(warnings) == 0 {
+			t.Fatal("Expected warning")
+		}
+
+		w := warnings[0]
+		if w.Feature != adapt.FeatureFormat {
+			t.Errorf("Feature = %v, want FeatureFormat", w.Feature)
+		}
+		if w.FromAdapter != "mcp" {
+			t.Errorf("FromAdapter = %q, want 'mcp'", w.FromAdapter)
+		}
+		if w.ToAdapter != "openai" {
+			t.Errorf("ToAdapter = %q, want 'openai'", w.ToAdapter)
+		}
+	})
+
+	t.Run("source format fallback to canonical", func(t *testing.T) {
+		ts := New("test")
+		ts.Add(&adapt.CanonicalTool{
+			Name:      "tool",
+			Namespace: "ns",
+			InputSchema: &adapt.JSONSchema{
+				Type:    "object",
+				Pattern: "^[a-z]+$",
+			},
+		})
+
+		adapter := &mockAdapter{
+			name: "mock",
+			supportedFeatures: map[adapt.SchemaFeature]bool{
+				adapt.FeaturePattern: false,
+			},
+		}
+		exp := NewExposure(ts, adapter)
+
+		_, warnings, _ := exp.ExportWithWarnings()
+		if len(warnings) == 0 {
+			t.Fatal("Expected warning")
+		}
+
+		if warnings[0].FromAdapter != "canonical" {
+			t.Errorf("FromAdapter = %q, want 'canonical'", warnings[0].FromAdapter)
+		}
+	})
+}
+
+func TestExposure_NilAdapter(t *testing.T) {
+	t.Run("export returns error for nil adapter", func(t *testing.T) {
+		ts := New("test")
+		ts.Add(makeTool("ns", "a", nil))
+
+		exp := NewExposure(ts, nil)
+
+		_, err := exp.Export()
+		if err == nil {
+			t.Error("Export() should return error for nil adapter")
+		}
+	})
+
+	t.Run("export with warnings returns error slice for nil adapter", func(t *testing.T) {
+		ts := New("test")
+		ts.Add(makeTool("ns", "a", nil))
+
+		exp := NewExposure(ts, nil)
+
+		_, _, errs := exp.ExportWithWarnings()
+		if len(errs) != 1 {
+			t.Fatalf("len(errs) = %d, want 1", len(errs))
+		}
+		if errs[0] == nil || errs[0].Error() != "adapter is nil" {
+			t.Errorf("unexpected error: %v", errs[0])
+		}
+	})
+}
+
+func TestExposure_EmptyToolset(t *testing.T) {
+	t.Run("returns empty slice no warnings no error", func(t *testing.T) {
+		ts := New("empty")
+		adapter := &mockAdapter{name: "mock"}
+		exp := NewExposure(ts, adapter)
+
+		result, err := exp.Export()
+		if err != nil {
+			t.Fatalf("Export() error = %v", err)
+		}
+		if len(result) != 0 {
+			t.Errorf("len(Export()) = %d, want 0", len(result))
+		}
+
+		resultW, warnings, errs := exp.ExportWithWarnings()
+		if len(resultW) != 0 {
+			t.Errorf("len(ExportWithWarnings result) = %d, want 0", len(resultW))
+		}
+		if len(warnings) != 0 {
+			t.Errorf("len(warnings) = %d, want 0", len(warnings))
+		}
+		if len(errs) != 0 {
+			t.Errorf("len(errs) = %d, want 0", len(errs))
+		}
+	})
+}
+
+func TestExposure_NestedSchema(t *testing.T) {
+	t.Run("tool with nested Properties/Items/Defs", func(t *testing.T) {
+		ts := New("test")
+		ts.Add(&adapt.CanonicalTool{
+			Name:      "nested",
+			Namespace: "ns",
+			InputSchema: &adapt.JSONSchema{
+				Type: "object",
+				Properties: map[string]*adapt.JSONSchema{
+					"items": {
+						Type: "array",
+						Items: &adapt.JSONSchema{
+							Type:    "string",
+							Pattern: "^[a-z]+$", // nested pattern
+						},
+					},
+				},
+			},
+		})
+
+		adapter := &mockAdapter{
+			name: "mock",
+			supportedFeatures: map[adapt.SchemaFeature]bool{
+				adapt.FeaturePattern: false,
+			},
+		}
+		exp := NewExposure(ts, adapter)
+
+		_, warnings, _ := exp.ExportWithWarnings()
+		if len(warnings) == 0 {
+			t.Error("Should detect pattern in nested Items")
+		}
+	})
+
+	t.Run("feature loss detection finds features at all depths", func(t *testing.T) {
+		ts := New("test")
+		ts.Add(&adapt.CanonicalTool{
+			Name:      "deep",
+			Namespace: "ns",
+			InputSchema: &adapt.JSONSchema{
+				Type: "object",
+				Defs: map[string]*adapt.JSONSchema{
+					"inner": {
+						Type:   "string",
+						Format: "email", // in defs
+					},
+				},
+			},
+		})
+
+		adapter := &mockAdapter{
+			name: "mock",
+			supportedFeatures: map[adapt.SchemaFeature]bool{
+				adapt.FeatureFormat: false,
+				adapt.FeatureDefs:   false,
+			},
+		}
+		exp := NewExposure(ts, adapter)
+
+		_, warnings, _ := exp.ExportWithWarnings()
+
+		foundFormat := false
+		foundDefs := false
+		for _, w := range warnings {
+			if w.Feature == adapt.FeatureFormat {
+				foundFormat = true
+			}
+			if w.Feature == adapt.FeatureDefs {
+				foundDefs = true
+			}
+		}
+		if !foundFormat {
+			t.Error("Should detect format in nested Defs")
+		}
+		if !foundDefs {
+			t.Error("Should detect Defs usage")
+		}
+	})
+}
+
+func TestExposure_Combinators(t *testing.T) {
+	t.Run("tool with anyOf/oneOf/allOf/not", func(t *testing.T) {
+		ts := New("test")
+		ts.Add(&adapt.CanonicalTool{
+			Name:      "combinators",
+			Namespace: "ns",
+			InputSchema: &adapt.JSONSchema{
+				Type: "object",
+				AnyOf: []*adapt.JSONSchema{
+					{Type: "string"},
+					{Type: "number"},
+				},
+				OneOf: []*adapt.JSONSchema{
+					{Type: "boolean"},
+				},
+				AllOf: []*adapt.JSONSchema{
+					{Type: "object"},
+				},
+				Not: &adapt.JSONSchema{Type: "null"},
+			},
+		})
+
+		adapter := &mockAdapter{
+			name: "mock",
+			supportedFeatures: map[adapt.SchemaFeature]bool{
+				adapt.FeatureAnyOf: false,
+				adapt.FeatureOneOf: false,
+				adapt.FeatureAllOf: false,
+				adapt.FeatureNot:   false,
+			},
+		}
+		exp := NewExposure(ts, adapter)
+
+		_, warnings, _ := exp.ExportWithWarnings()
+
+		features := make(map[adapt.SchemaFeature]bool)
+		for _, w := range warnings {
+			features[w.Feature] = true
+		}
+
+		if !features[adapt.FeatureAnyOf] {
+			t.Error("Should warn about anyOf")
+		}
+		if !features[adapt.FeatureOneOf] {
+			t.Error("Should warn about oneOf")
+		}
+		if !features[adapt.FeatureAllOf] {
+			t.Error("Should warn about allOf")
+		}
+		if !features[adapt.FeatureNot] {
+			t.Error("Should warn about not")
+		}
+	})
+
+	t.Run("feature loss detection walks combinator branches", func(t *testing.T) {
+		ts := New("test")
+		ts.Add(&adapt.CanonicalTool{
+			Name:      "nested-combinator",
+			Namespace: "ns",
+			InputSchema: &adapt.JSONSchema{
+				Type: "object",
+				AnyOf: []*adapt.JSONSchema{
+					{
+						Type:    "string",
+						Pattern: "^test$", // pattern inside anyOf branch
+					},
+				},
+			},
+		})
+
+		adapter := &mockAdapter{
+			name: "mock",
+			supportedFeatures: map[adapt.SchemaFeature]bool{
+				adapt.FeaturePattern: false,
+				adapt.FeatureAnyOf:   true, // supports anyOf but not pattern
+			},
+		}
+		exp := NewExposure(ts, adapter)
+
+		_, warnings, _ := exp.ExportWithWarnings()
+
+		found := false
+		for _, w := range warnings {
+			if w.Feature == adapt.FeaturePattern {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Error("Should detect pattern inside anyOf branch")
+		}
+	})
+}
+
+func TestExposure_RefInNested(t *testing.T) {
+	t.Run("$ref inside Properties", func(t *testing.T) {
+		ts := New("test")
+		ts.Add(&adapt.CanonicalTool{
+			Name:      "with-ref",
+			Namespace: "ns",
+			InputSchema: &adapt.JSONSchema{
+				Type: "object",
+				Properties: map[string]*adapt.JSONSchema{
+					"user": {
+						Ref: "#/$defs/User",
+					},
+				},
+			},
+		})
+
+		adapter := &mockAdapter{
+			name: "mock",
+			supportedFeatures: map[adapt.SchemaFeature]bool{
+				adapt.FeatureRef: false,
+			},
+		}
+		exp := NewExposure(ts, adapter)
+
+		_, warnings, _ := exp.ExportWithWarnings()
+
+		found := false
+		for _, w := range warnings {
+			if w.Feature == adapt.FeatureRef {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Error("Should warn about $ref in nested property")
+		}
+	})
+}
