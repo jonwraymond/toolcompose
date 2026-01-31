@@ -8,8 +8,7 @@ import (
 
 func TestPolicy_Interface(t *testing.T) {
 	t.Run("Policy.Allow signature", func(t *testing.T) {
-		var p Policy
-		p = AllowAll() // must implement Policy
+		var p Policy = AllowAll() // must implement Policy
 		tool := makeTool("ns", "foo", nil)
 		_ = p.Allow(tool) // must accept *CanonicalTool and return bool
 	})

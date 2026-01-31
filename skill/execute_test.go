@@ -6,6 +6,10 @@ import (
 	"testing"
 )
 
+type ctxKey string
+
+const testCtxKey ctxKey = "key"
+
 type mockRunner struct {
 	calls []string
 	fail  bool
@@ -67,7 +71,7 @@ func TestExecute_ContextPropagation(t *testing.T) {
 	plan := Plan{Name: "workflow", Steps: []Step{{ID: "a", ToolID: "t1"}}}
 
 	runner := &mockRunner{}
-	ctx := context.WithValue(context.Background(), "key", "value")
+	ctx := context.WithValue(context.Background(), testCtxKey, "value")
 	_, err := Execute(ctx, plan, runner)
 	if err != nil {
 		t.Fatalf("execute failed: %v", err)

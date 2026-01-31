@@ -30,7 +30,7 @@ func TestSkill_SerializationDeterministic(t *testing.T) {
 
 func TestSkill_Validate(t *testing.T) {
 	skill := Skill{
-		Name: "",
+		Name:  "",
 		Steps: []Step{{ID: "s1", ToolID: "mcp:search"}},
 	}
 
