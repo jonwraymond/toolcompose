@@ -1,9 +1,5 @@
 package skill
 
-import "errors"
-
-var ErrInvalidSkillName = errors.New("skill: skill name is required")
-
 // Skill represents a declarative workflow.
 type Skill struct {
 	Name  string

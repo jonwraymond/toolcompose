@@ -77,3 +77,64 @@ func TestExecute_ContextPropagation(t *testing.T) {
 		t.Fatalf("execute failed: %v", err)
 	}
 }
+
+func TestExecute_NilRunner(t *testing.T) {
+	plan := Plan{Name: "workflow", Steps: []Step{{ID: "a", ToolID: "t1"}}}
+
+	_, err := Execute(context.Background(), plan, nil)
+	if !errors.Is(err, ErrInvalidRunner) {
+		t.Fatalf("expected ErrInvalidRunner, got: %v", err)
+	}
+}
+
+func TestExecute_EmptyPlan(t *testing.T) {
+	plan := Plan{Name: "workflow", Steps: []Step{}}
+	runner := &mockRunner{}
+
+	results, err := Execute(context.Background(), plan, runner)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(results) != 0 {
+		t.Fatalf("expected 0 results, got %d", len(results))
+	}
+}
+
+func TestExecute_PartialResultsOnError(t *testing.T) {
+	// Runner that fails on second step
+	runner := &partialFailRunner{failOnStep: "b"}
+	plan := Plan{
+		Name: "workflow",
+		Steps: []Step{
+			{ID: "a", ToolID: "t1"},
+			{ID: "b", ToolID: "t2"},
+			{ID: "c", ToolID: "t3"},
+		},
+	}
+
+	results, err := Execute(context.Background(), plan, runner)
+	if err == nil {
+		t.Fatalf("expected error")
+	}
+	// Should have partial results (a succeeded, b failed)
+	if len(results) != 2 {
+		t.Fatalf("expected 2 partial results, got %d", len(results))
+	}
+	if results[0].Err != nil {
+		t.Fatalf("first result should not have error")
+	}
+	if results[1].Err == nil {
+		t.Fatalf("second result should have error")
+	}
+}
+
+type partialFailRunner struct {
+	failOnStep string
+}
+
+func (r *partialFailRunner) Run(ctx context.Context, step Step) (any, error) {
+	if step.ID == r.failOnStep {
+		return nil, errors.New("step failed")
+	}
+	return step.ID + "-ok", nil
+}

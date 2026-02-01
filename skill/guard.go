@@ -1,15 +1,11 @@
 package skill
 
-import "errors"
-
-var ErrMaxStepsExceeded = errors.New("skill: max steps exceeded")
-var ErrToolNotAllowed = errors.New("skill: tool id not allowed")
-
 // Guard validates a skill or step.
 //
 // Contract:
-// - Concurrency: implementations must be safe for concurrent use.
-// - Errors: validation failures must return non-nil error; must not panic.
+//   - Concurrency: implementations must be safe for concurrent use.
+//   - Errors: validation failures must return non-nil error; must not panic.
+//   - Determinism: same skill should yield same result.
 type Guard interface {
 	Validate(skill Skill) error
 }

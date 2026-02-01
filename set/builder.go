@@ -1,10 +1,6 @@
 package set
 
-import (
-	"errors"
-
-	"github.com/jonwraymond/toolfoundation/adapter"
-)
+import "github.com/jonwraymond/toolfoundation/adapter"
 
 // Registry provides tools for the builder.
 //
@@ -18,6 +14,16 @@ type Registry interface {
 }
 
 // Builder constructs Toolsets with filtering.
+//
+// Thread-safety: Builder is NOT safe for concurrent use. Create and
+// configure Builders in a single goroutine, then call Build() once.
+// The resulting Toolset IS thread-safe.
+//
+// Execution flow:
+//  1. Source tools gathered from FromTools or FromRegistry
+//  2. Filters applied in order (AND-composed)
+//  3. Policy applied last (if set)
+//  4. Resulting tools added to new Toolset
 type Builder struct {
 	name      string
 	source    []*adapter.CanonicalTool
@@ -102,7 +108,7 @@ func (b *Builder) Build() (*Toolset, error) {
 	} else if b.source != nil || b.sourceSet {
 		tools = b.source
 	} else {
-		return nil, errors.New("no source: call FromTools or FromRegistry")
+		return nil, ErrNoSource
 	}
 
 	// Apply filters (AND composition)

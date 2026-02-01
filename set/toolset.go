@@ -8,9 +8,19 @@ import (
 )
 
 // FilterFunc is a predicate for filtering tools.
+//
+// Contract:
+//   - Must not call methods on the Toolset being filtered (would deadlock)
+//   - Must not mutate the tool (treat as read-only)
+//   - Must be safe for concurrent calls if Toolset is shared
+//   - Must return false for nil tools
 type FilterFunc func(*adapter.CanonicalTool) bool
 
 // Toolset is a thread-safe collection of canonical tools.
+//
+// All methods are safe for concurrent use. Tools are stored by reference;
+// callers should not mutate tools after adding them to a Toolset.
+// Results from IDs() and Tools() are deterministically sorted by ID.
 type Toolset struct {
 	name  string
 	mu    sync.RWMutex

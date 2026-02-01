@@ -1,10 +1,5 @@
 package skill
 
-import "errors"
-
-var ErrInvalidStepID = errors.New("skill: step id is required")
-var ErrInvalidToolID = errors.New("skill: tool id is required")
-
 // Step references a tool and its bindings.
 type Step struct {
 	ID     string

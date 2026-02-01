@@ -1,10 +1,6 @@
 package set
 
-import (
-	"errors"
-
-	"github.com/jonwraymond/toolfoundation/adapter"
-)
+import "github.com/jonwraymond/toolfoundation/adapter"
 
 // Exposure exports a Toolset to protocol-specific formats.
 type Exposure struct {
@@ -20,7 +16,7 @@ func NewExposure(ts *Toolset, adapter adapter.Adapter) *Exposure {
 // Export converts all tools to the adapter's format.
 func (e *Exposure) Export() ([]any, error) {
 	if e.adapter == nil {
-		return nil, errors.New("adapter is nil")
+		return nil, ErrNilAdapter
 	}
 	tools := e.toolset.Tools()
 	result := make([]any, 0, len(tools))
@@ -39,7 +35,7 @@ func (e *Exposure) Export() ([]any, error) {
 // Callers should check the errors slice to detect tools that failed to convert.
 func (e *Exposure) ExportWithWarnings() ([]any, []adapter.FeatureLossWarning, []error) {
 	if e.adapter == nil {
-		return nil, nil, []error{errors.New("adapter is nil")}
+		return nil, nil, []error{ErrNilAdapter}
 	}
 
 	tools := e.toolset.Tools()

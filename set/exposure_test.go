@@ -307,8 +307,8 @@ func TestExposure_NilAdapter(t *testing.T) {
 		if len(errs) != 1 {
 			t.Fatalf("len(errs) = %d, want 1", len(errs))
 		}
-		if errs[0] == nil || errs[0].Error() != "adapter is nil" {
-			t.Errorf("unexpected error: %v", errs[0])
+		if errs[0] == nil || errs[0] != ErrNilAdapter {
+			t.Errorf("unexpected error: %v, want ErrNilAdapter", errs[0])
 		}
 	})
 }

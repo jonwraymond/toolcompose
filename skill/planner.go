@@ -1,11 +1,6 @@
 package skill
 
-import (
-	"errors"
-	"sort"
-)
-
-var ErrNoSteps = errors.New("skill: skill has no steps")
+import "sort"
 
 // Plan is the compiled, deterministic execution plan.
 type Plan struct {
