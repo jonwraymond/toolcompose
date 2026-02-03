@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 1.0.0 (2026-02-03)
+
+
+### Features
+
+* expand toolcompose set/skill with examples and tests ([fb7ce0d](https://github.com/jonwraymond/toolcompose/commit/fb7ce0de923b2bcfd0ddf6dc674612373b583e15))
+* initial repository structure ([7ae48ca](https://github.com/jonwraymond/toolcompose/commit/7ae48ca7a7984bbdf808a276f1f3f60824edebe1))
+* **set:** migrate toolset to toolcompose/set package (PRD-150) ([4997ef4](https://github.com/jonwraymond/toolcompose/commit/4997ef448f61f92f1eab34a9c1cab25a041d3a10))
+* **skill:** migrate toolskill to toolcompose/skill package (PRD-151) ([d643092](https://github.com/jonwraymond/toolcompose/commit/d64309212377aeaedd873bea87906aee2d143077))
+
+
+### Documentation
+
+* add mkdocs config ([dd9b6d2](https://github.com/jonwraymond/toolcompose/commit/dd9b6d2d9dbd0852c6f8d8bf9e214e8f1d502062))
+* **toolcompose:** align set/skill documentation ([b96dd40](https://github.com/jonwraymond/toolcompose/commit/b96dd40bd6616a3cee4b03c4271a42d6241b0e74))
+* update version matrix ([#9](https://github.com/jonwraymond/toolcompose/issues/9)) ([ea6de6e](https://github.com/jonwraymond/toolcompose/commit/ea6de6eca36fb1dd96ea68cc83f2555ee3ac2355))
+
 ## [Unreleased]
 
 ### Added
