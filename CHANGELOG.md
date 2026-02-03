@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.4](https://github.com/jonwraymond/toolcompose/compare/v0.1.3...v0.1.4) (2026-02-03)
+
+
+### Documentation
+
+* update version matrix ([#9](https://github.com/jonwraymond/toolcompose/issues/9)) ([ea6de6e](https://github.com/jonwraymond/toolcompose/commit/ea6de6eca36fb1dd96ea68cc83f2555ee3ac2355))
+
 ## [Unreleased]
 
 ### Added
