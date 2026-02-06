@@ -1,6 +1,6 @@
 module github.com/jonwraymond/toolcompose
 
-go 1.25.6
+go 1.25.7
 
 require github.com/jonwraymond/toolfoundation v0.2.0
 
